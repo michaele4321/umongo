@@ -4,6 +4,10 @@ History
 
 dev
 ---
+* ``missing`` attribute is no longer used in umongo fields, only ``default`` is
+  used. ``marshmallow_missing`` and ``marshmallow_default`` attribute can be
+  used to overwrite the value to use in the pure marshmallow field returned
+  by `as_marshmallow_field` method.
 * Add force_reload param to Reference.fetch (see #96)
 
 0.14.0 (2017-03-03)

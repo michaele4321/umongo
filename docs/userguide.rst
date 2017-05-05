@@ -55,13 +55,13 @@ First let's define a document with few :mod:`umongo.fields`
     @instance.register
     class Dog(Document):
         name = fields.StrField(required=True)
-        breed = fields.StrField(missing="Mongrel")
+        breed = fields.StrField(default="Mongrel")
         birthday = fields.DateTimeField()
 
 First don't pay attention to the ``@instance.register``, this is for later ;-)
 
 Note that each field can be customized with special attributes like
-``required`` (which is pretty self-explanatory) or ``missing`` (if the
+``required`` (which is pretty self-explanatory) or ``default`` (if the
 field is missing during unserialization it will take this value).
 
 Now we can play back and forth between OO and client worlds
@@ -327,7 +327,7 @@ and you're good to go:
     >>> @instance.register
     ... class Dog(Document):
     ...     name = fields.StrField(attribute='_id')
-    ...     breed = fields.StrField(missing="Mongrel")
+    ...     breed = fields.StrField(default="Mongrel")
 
 Of course the way you'll be calling methods will differ:
 
@@ -554,7 +554,7 @@ For more simple usecases we could use the
     >>> @instance.register
     ... class Dog(Document):
     ...     name = fields.StrField(required=True)
-    ...     breed = fields.StrField(missing="Mongrel")
+    ...     breed = fields.StrField(default="Mongrel")
     ...     birthday = fields.DateTimeField()
     ...     @post_dump
     ...     def customize_dump(self, data):
@@ -591,8 +591,8 @@ from scratch... almost:
 
 .. note:: A custom marshmallow schema :class:`umongo.marshmallow_bonus.SchemaFromUmongo`
     can be used instead of regular :class:`marshmallow.Schema` to benefit a tighter
-    integration with umongo (unknown field checking and access to missing fields
-    instead of serializing them as `None`)
+    integration with umongo (unknown field checking and field with missing value
+    actually return the ``missing`` singleton instead of serializing it as `None`)
 
 This time we directly convert umongo schema's fields into there marshmallow
 equivalent with ``as_marshmallow_field``. Now we can build our ducks easily:
@@ -610,6 +610,37 @@ equivalent with ``as_marshmallow_field``. Now we can build our ducks easily:
     except ValidationError as e:
         # Error handling
         ...
+
+One final thought: field's ``missing`` and ``default`` attributes are not handled the same in
+marshmallow and umongo.
+
+In marshmallow ``default`` contains the value to use during serialization
+(i.e. calling ``schema.dump(doc)``) and ``missing`` the value for deserialization.
+ where the field is
+
+In umongo however there is only a ``default`` attribute which will be used when
+creating (or loading from user world) a document where this field is missing.
+This is because you don't need to control how umongo will store the document in
+mongo world.
+
+So when you use ``as_marshmallow_field``, the resulting marshmallow field's
+``missing``&``default`` will be by default both infered from the umongo's
+``default`` field. You can want to overwrite this behavior by using
+``marshmallow_missing``/``marshmallow_default`` attributes:
+
+.. code-block:: python
+
+    @instance.register
+    class Employee(Document):
+        name = fields.StrField(default='John Doe')
+        birthday = fields.DateTimeField(marshmallow_missing='2000-01-01T00:00:00Z')
+        # You can use `missing` singleton to overwrite `default` field inference
+        skill = fields.StrField(default='Dummy', marshmallow_default=missing)
+
+    ret = Employee.schema.as_marshmallow_schema()().load({})
+    assert ret.data == {'name': 'John Doe', 'birthday': datetime(2000, 1, 1, 0, 0, tzinfo=tzutc()), 'skill': 'Dummy'}
+    ret = Employee.schema.as_marshmallow_schema()().dump({})
+    assert ret.data == {'name': 'John Doe', 'birthday': '2000-01-01T00:00:00+00:00'}  # Note `skill` hasn't been serialized
 
 
 Field validate & io_validate
