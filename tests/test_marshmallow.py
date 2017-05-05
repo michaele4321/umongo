@@ -80,7 +80,7 @@ class TestMarshmallow(BaseTest):
         class Vehicle(Document):
             brand = fields.StrField(description='Manufacturer name')
             category = fields.StrField(required=True)
-            nb_wheels = fields.IntField(missing=4)
+            nb_wheels = fields.IntField(default=4)
 
         ma_schema_cls = Vehicle.schema.as_marshmallow_schema()
         schema = ma_schema_cls()
@@ -120,7 +120,7 @@ class TestMarshmallow(BaseTest):
 
         ret = schema.dump({'is_left_handed': True})
         assert not ret.errors
-        assert ret.data == {'name': '1337', 'is_left_handed': True}
+        assert ret.data == {'name': '1337', 'is_left_handed': True, 'cls': 'AdvancedUser'}
 
     def test_to_mongo(self):
         @self.instance.register
@@ -165,8 +165,35 @@ class TestMarshmallow(BaseTest):
         assert ret.data == {'name': 'John'}
 
     def test_missing_accessor(self):
-        # TODO
-        pass
+        from marshmallow import missing
+
+        @self.instance.register
+        class WithDefault(Document):
+            with_umongo_default = fields.StrictDateTimeField(default=datetime(1999, 1, 1))
+            with_marshmallow_missing = fields.StrictDateTimeField(marshmallow_missing='2000-01-01T00:00:00+00:00')
+            with_marshmallow_default = fields.StrictDateTimeField(marshmallow_default='2001-01-01T00:00:00+00:00')
+            with_marshmallow_and_umongo = fields.StrictDateTimeField(
+                default=datetime(1999, 1, 1), marshmallow_missing='2000-01-01T00:00:00+00:00',
+                marshmallow_default='2001-01-01T00:00:00+00:00')
+            with_force_missing = fields.StrictDateTimeField(
+                default=datetime(2001, 1, 1), marshmallow_missing=missing, marshmallow_default=missing)
+            with_nothing = fields.StrField()
+
+        ma_schema = WithDefault.schema.as_marshmallow_schema()()
+        ret = ma_schema.dump({})
+        assert not ret.errors
+        assert ret.data == {
+            'with_umongo_default': '1999-01-01T00:00:00+00:00',
+            'with_marshmallow_default': '2001-01-01T00:00:00+00:00',
+            'with_marshmallow_and_umongo': '2001-01-01T00:00:00+00:00',
+        }
+        ret = ma_schema.load({})
+        assert not ret.errors
+        assert ret.data == {
+            'with_umongo_default': datetime(1999, 1, 1),
+            'with_marshmallow_missing': datetime(2000, 1, 1),
+            'with_marshmallow_and_umongo': datetime(2000, 1, 1),
+        }
 
     def test_nested_field(self):
         @self.instance.register

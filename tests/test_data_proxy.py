@@ -1,5 +1,6 @@
-from marshmallow import ValidationError, missing
 import pytest
+from bson import ObjectId
+from marshmallow import ValidationError, missing
 
 from umongo.data_proxy import data_proxy_factory
 from umongo import EmbeddedSchema, fields, EmbeddedDocument, validate, exceptions
@@ -264,19 +265,20 @@ class TestDataProxy(BaseTest):
         assert d._data['in_mongo_b'] is missing
 
     def test_default(self):
+        default_value = ObjectId('507f1f77bcf86cd799439011')
 
         class MySchema(EmbeddedSchema):
-            with_default = fields.StrField(default='default_value')
-            with_missing = fields.StrField(missing='missing_value')
+            no_default = fields.ObjectIdField()
+            with_default = fields.ObjectIdField(default=default_value)
 
         MyDataProxy = data_proxy_factory('My', MySchema())
         d = MyDataProxy(data={})
-        assert d._data['with_default'] is missing
-        assert d._data['with_missing'] is 'missing_value'
-        assert d.get('with_default') == 'default_value'
-        assert d.get('with_missing') == 'missing_value'
-        assert d.to_mongo() == {'with_missing': 'missing_value'}
-        assert d.dump() == {'with_default': 'default_value', 'with_missing': 'missing_value'}
+        assert d._data['no_default'] is missing
+        assert d._data['with_default'] == default_value
+        assert d.get('no_default') is missing
+        assert d.get('with_default') == default_value
+        assert d.to_mongo() == {'with_default': default_value}
+        assert d.dump() == {'with_default': str(default_value)}
 
     def test_validate(self):
 
@@ -296,7 +298,6 @@ class TestDataProxy(BaseTest):
 
         class MySchema(EmbeddedSchema):
             with_default = fields.StrField(default='default_value')
-            with_missing = fields.StrField(missing='missing_value')
             normal = fields.StrField()
             loaded = fields.StrField()
             loaded_but_empty = fields.StrField()
@@ -306,7 +307,7 @@ class TestDataProxy(BaseTest):
         d = MyDataProxy()
         d.from_mongo({'loaded': "foo", 'loaded_but_empty': missing}, partial=True)
         assert d.partial is True
-        for field in ('with_default', 'with_missing', 'normal'):
+        for field in ('with_default', 'normal'):
             with pytest.raises(exceptions.FieldNotLoadedError):
                 d.get(field)
             with pytest.raises(exceptions.FieldNotLoadedError):
@@ -325,7 +326,7 @@ class TestDataProxy(BaseTest):
         d = MyDataProxy()
         d.load({'loaded': "foo", 'loaded_but_empty': missing}, partial=True)
         assert d.partial is True
-        for field in ('with_default', 'with_missing', 'normal'):
+        for field in ('with_default', 'normal'):
             with pytest.raises(exceptions.FieldNotLoadedError):
                 d.get(field)
             with pytest.raises(exceptions.FieldNotLoadedError):
@@ -345,7 +346,6 @@ class TestDataProxy(BaseTest):
         d.from_mongo({'loaded': "foo", 'loaded_but_empty': missing})
         assert d.partial is False
         assert d.get('with_default') == 'default_value'
-        assert d.get('with_missing') == 'missing_value'
         assert d.get('normal') is missing
         assert d.get('loaded') == "foo"
         assert d.get('loaded_but_empty') == missing
@@ -355,7 +355,6 @@ class TestDataProxy(BaseTest):
         assert d.partial is False
         assert d.partial is False
         assert d.get('with_default') == 'default_value'
-        assert d.get('with_missing') == 'missing_value'
         assert d.get('normal') is missing
         assert d.get('loaded') == "foo"
         assert d.get('loaded_but_empty') == missing
@@ -376,8 +375,8 @@ class TestDataProxy(BaseTest):
         # Partial, then update turns it into not partial
         d = MyDataProxy()
         d.from_mongo({'loaded': "foo", 'loaded_but_empty': missing}, partial=True)
-        assert len(d.not_loaded_fields) == 4
-        d.update({'with_default': 'test', 'with_missing': 'test', 'normal_with_attribute': 'foo'})
+        assert len(d.not_loaded_fields) == 3
+        d.update({'with_default': 'test', 'normal_with_attribute': 'foo'})
         assert len(d.not_loaded_fields) == 1
         assert d.partial is True
         d.update({'normal': 'test'})

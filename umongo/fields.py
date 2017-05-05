@@ -55,8 +55,7 @@ __all__ = (
 class DictField(BaseField, ma_fields.Dict):
 
     def __init__(self, *args, **kwargs):
-        kwargs.setdefault('default', {})
-        kwargs.setdefault('missing', Dict)
+        kwargs.setdefault('default', Dict)
         super().__init__(*args, **kwargs)
 
     def _deserialize(self, value, attr, data):
@@ -83,8 +82,7 @@ class DictField(BaseField, ma_fields.Dict):
 class ListField(BaseField, ma_fields.List):
 
     def __init__(self, *args, **kwargs):
-        kwargs.setdefault('default', [])
-        kwargs.setdefault('missing', lambda: List(self.container))
+        kwargs.setdefault('default', lambda: List(self.container))
         super().__init__(*args, **kwargs)
 
     def _deserialize(self, value, attr, data):

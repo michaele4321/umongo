@@ -64,7 +64,7 @@ class TestInheritance(BaseTest):
 
         @self.instance.register
         class AbstractDoc(Document):
-            abs_field = fields.StrField(missing='from abstract')
+            abs_field = fields.StrField(default='from abstract')
 
             class Meta:
                 abstract = True
