@@ -3,7 +3,7 @@ from datetime import datetime
 from bson import ObjectId
 import marshmallow
 
-from umongo import Document, EmbeddedDocument, fields, set_gettext, validate
+from umongo import Document, EmbeddedDocument, fields, set_gettext, validate, missing
 from umongo import marshmallow_bonus as ma_bonus_fields
 from umongo.abstract import BaseField, BaseSchema
 from umongo.marshmallow_bonus import (
@@ -165,7 +165,6 @@ class TestMarshmallow(BaseTest):
         assert ret.data == {'name': 'John'}
 
     def test_missing_accessor(self):
-        from marshmallow import missing
 
         @self.instance.register
         class WithDefault(Document):
