@@ -79,19 +79,14 @@ class BaseDataProxy:
         self._add_missing_fields()
 
     def dump(self):
-        data, err = self.schema.dump(self._data)
-        if err:
-            raise ValidationError(err)
-        return data
+        return self.schema.dump(self._data)
 
     def _mark_as_modified(self, key):
         self._modified_data.add(key)
 
     def update(self, data):
         # Always use marshmallow partial load to skip required checks
-        loaded_data, err = self.schema.load(data, partial=True)
-        if err:
-            raise ValidationError(err)
+        loaded_data = self.schema.load(data, partial=True)
         self._data.update(loaded_data)
         if self.not_loaded_fields:
             for k in loaded_data:
@@ -101,9 +96,7 @@ class BaseDataProxy:
 
     def load(self, data, partial=False):
         # Always use marshmallow partial load to skip required checks
-        loaded_data, err = self.schema.load(data, partial=True)
-        if err:
-            raise ValidationError(err)
+        loaded_data = self.schema.load(data, partial=True)
         self._data = loaded_data
         # Map the modified fields list on the the loaded data
         self.clear_modified()

@@ -455,7 +455,7 @@ class TestNonStrictDataProxy(BaseTest):
         NonStrictDataProxy = data_proxy_factory('My', MySchema(), strict=False)
         with pytest.raises(exceptions.ValidationError) as exc:
             NonStrictDataProxy({'field_a': 42, 'xxx': 'foo'})
-        assert exc.value.messages == {'_schema': ['Unknown field name xxx.']}
+        assert exc.value.messages == {'xxx': ['Unknown field.']}
         d = NonStrictDataProxy()
         d.from_mongo({'mongo_field_a': 42, 'xxx': 'foo'})
         assert d._data == {'mongo_field_a': 42}

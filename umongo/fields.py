@@ -58,8 +58,8 @@ class DictField(BaseField, ma_fields.Dict):
         kwargs.setdefault('missing', Dict)
         super().__init__(*args, **kwargs)
 
-    def _deserialize(self, value, attr, data):
-        value = super()._deserialize(value, attr, data)
+    def _deserialize(self, value, attr, data, **kwargs):
+        value = super()._deserialize(value, attr, data, **kwargs)
         return Dict(value)
 
     def _serialize_to_mongo(self, obj):
@@ -86,8 +86,8 @@ class ListField(BaseField, ma_fields.List):
         kwargs.setdefault('missing', lambda: List(self.container))
         super().__init__(*args, **kwargs)
 
-    def _deserialize(self, value, attr, data):
-        return List(self.container, super()._deserialize(value, attr, data))
+    def _deserialize(self, value, attr, data, **kwargs):
+        return List(self.container, super()._deserialize(value, attr, data, **kwargs))
 
     def _serialize_to_mongo(self, obj):
         if not obj:
@@ -169,18 +169,18 @@ class FloatField(BaseField, ma_fields.Float):
 
 class DateTimeField(BaseField, ma_fields.DateTime):
 
-    def _deserialize(self, value, attr, data):
+    def _deserialize(self, value, attr, data, **kwargs):
         if isinstance(value, datetime):
             return value
-        return super()._deserialize(value, attr, data)
+        return super()._deserialize(value, attr, data, **kwargs)
 
 
 class LocalDateTimeField(BaseField, ma_fields.LocalDateTime):
 
-    def _deserialize(self, value, attr, data):
+    def _deserialize(self, value, attr, data, **kwargs):
         if isinstance(value, datetime):
             return value
-        return super()._deserialize(value, attr, data)
+        return super()._deserialize(value, attr, data, **kwargs)
 
 
 # class TimeField(BaseField, ma_fields.Time):
@@ -218,10 +218,10 @@ IntField = IntegerField
 
 class StrictDateTimeField(BaseField, ma_bonus_fields.StrictDateTime):
 
-    def _deserialize(self, value, attr, data):
+    def _deserialize(self, value, attr, data, **kwargs):
         if isinstance(value, datetime):
             return self._set_tz_awareness(value)
-        return super()._deserialize(value, attr, data)
+        return super()._deserialize(value, attr, data, **kwargs)
 
     def _deserialize_from_mongo(self, value):
         return self._set_tz_awareness(value)
@@ -262,7 +262,7 @@ class ReferenceField(BaseField, ma_bonus_fields.Reference):
             self._document_cls = self.instance.retrieve_document(self.document)
         return self._document_cls
 
-    def _deserialize(self, value, attr, data):
+    def _deserialize(self, value, attr, data, **kwargs):
         if value is None:
             return None
         if isinstance(value, DBRef):
@@ -285,7 +285,7 @@ class ReferenceField(BaseField, ma_bonus_fields.Reference):
         elif isinstance(value, self._document_implementation_cls):
             raise ValidationError(_("`{document}` reference expected.").format(
                 document=self.document_cls.__name__))
-        value = super()._deserialize(value, attr, data)
+        value = super()._deserialize(value, attr, data, **kwargs)
         # `value` is similar to data received from the database so we
         # can use `_deserialize_from_mongo` to finish the deserialization
         return self._deserialize_from_mongo(value)
@@ -323,7 +323,7 @@ class GenericReferenceField(BaseField, ma_bonus_fields.GenericReference):
             return None
         return {'id': str(value.pk), 'cls': value.document_cls.__name__}
 
-    def _deserialize(self, value, attr, data):
+    def _deserialize(self, value, attr, data, **kwargs):
         if value is None:
             return None
         if isinstance(value, Reference):
@@ -416,7 +416,7 @@ class EmbeddedField(BaseField, ma_fields.Nested):
             return None
         return value.dump()
 
-    def _deserialize(self, value, attr, data):
+    def _deserialize(self, value, attr, data, **kwargs):
         embedded_document_cls = self.embedded_document_cls
         if isinstance(value, embedded_document_cls):
             return value
@@ -435,9 +435,7 @@ class EmbeddedField(BaseField, ma_fields.Nested):
             return to_use_cls(**value)
         else:
             # `Nested._deserialize` calls schema.load without partial=True
-            data, errors = self.schema.load(value, partial=True)
-            if errors:
-                raise ValidationError(errors, data=data)
+            data = self.schema.load(value, partial=True)
             return self._deserialize_from_mongo(data)
 
     def _serialize_to_mongo(self, obj):

@@ -549,4 +549,4 @@ class TestConfig(BaseTest):
 
         with pytest.raises(exceptions.ValidationError) as exc:
             NonStrictDoc(a=42, b='foo')
-        assert exc.value.messages == {'_schema': ['Unknown field name b.']}
+        assert exc.value.messages == {'b': ['Unknown field.']}

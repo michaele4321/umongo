@@ -1,9 +1,8 @@
 from marshmallow import (Schema as MaSchema, fields as ma_fields,
-                         validate as ma_validate, missing, validates_schema)
+                         validate as ma_validate, missing, EXCLUDE)
 
 from .i18n import gettext as _, N_
-from .marshmallow_bonus import (schema_validator_check_unknown_fields,
-                                schema_from_umongo_get_attribute)
+from .marshmallow_bonus import schema_from_umongo_get_attribute
 
 
 __all__ = ('BaseSchema', 'BaseField', 'BaseValidator', 'BaseDataObject')
@@ -13,9 +12,6 @@ class BaseSchema(MaSchema):
     """
     All schema used in umongo should inherit from this base schema
     """
-
-    __check_unknown_fields = validates_schema(pass_original=True)(
-        schema_validator_check_unknown_fields)
 
     def map_to_field(self, func):
         """
@@ -44,6 +40,7 @@ class BaseSchema(MaSchema):
         :param meta: Optional dict with attributes for the schema's Meta class.
         """
         params = params or {}
+        meta = meta or {}
         nmspc = {
             name: field.as_marshmallow_field(
                 params=params.get(name),
@@ -53,9 +50,8 @@ class BaseSchema(MaSchema):
             for name, field in self.fields.items()
         }
         name = 'Marshmallow%s' % type(self).__name__
-        if check_unknown_fields:
-            nmspc['_%s__check_unknown_fields' % name] = validates_schema(
-                pass_original=True)(schema_validator_check_unknown_fields)
+        if not check_unknown_fields:
+            meta.setdefault('unknown', EXCLUDE)
         # By default OO world returns `missing` fields as `None`,
         # disable this behavior here to let marshmallow deals with it
         if not mongo_world:
@@ -132,8 +128,8 @@ class BaseField(ma_fields.Field):
         if value is None and getattr(self, 'allow_none', False) is False:
             self.fail('null')
 
-    def deserialize(self, value, attr=None, data=None):
-        return super().deserialize(value, attr=attr, data=data)
+    def deserialize(self, value, attr=None, data=None, **kwargs):
+        return super().deserialize(value, attr=attr, data=data, **kwargs)
 
     def serialize_to_mongo(self, obj):
         if obj is None and getattr(self, 'allow_none', False) is True:
@@ -186,7 +182,7 @@ class BaseField(ma_fields.Field):
 
     def _extract_marshmallow_field_params(self, mongo_world):
         params = {field: getattr(self, field)
-                  for field in ('default', 'load_from', 'validate',
+                  for field in ('default', 'data_key', 'validate',
                                 'required', 'allow_none', 'load_only',
                                 'dump_only', 'missing', 'error_messages')}
         if mongo_world and self.attribute:

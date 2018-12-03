@@ -1,14 +1,13 @@
 from dateutil.tz import tzutc
 
 from marshmallow import ValidationError, Schema as MaSchema, missing
-from marshmallow import fields as ma_fields, validates_schema
+from marshmallow import fields as ma_fields
 import bson
 
 from .i18n import gettext as _
 
 
 __all__ = (
-    'schema_validator_check_unknown_fields',
     'schema_from_umongo_get_attribute',
     'SchemaFromUmongo',
 
@@ -22,35 +21,7 @@ __all__ = (
 # Bonus: schema helpers !
 
 
-def schema_validator_check_unknown_fields(self, data, original_data):
-    """
-    Schema validator, raise ValidationError for unknown fields in a
-    marshmallow schema.
-
-    example::
-
-        class MySchema(marshsmallow.Schema):
-            # method's name is not important
-            __check_unknown_fields = validates_schema(pass_original=True)(
-                schema_validator_check_unknown_fields)
-
-            # Define the rest of your schema
-            ...
-
-    ..note:: Unknown fields with `missing` value will be ignored
-    """
-    # Just skip if dummy data have been passed to the schema
-    if not isinstance(original_data, dict):
-        return
-    loadable_fields = [k for k, v in self.fields.items() if not v.dump_only]
-    unknown_fields = {key for key, value in original_data.items()
-                      if value is not missing and key not in loadable_fields}
-    if unknown_fields:
-        raise ValidationError([_('Unknown field name {field}.').format(field=field)
-                               for field in unknown_fields])
-
-
-def schema_from_umongo_get_attribute(self, attr, obj, default):
+def schema_from_umongo_get_attribute(self, obj, attr, default):
     """
     Overwrite default `Schema.get_attribute` method by this one to access
         umongo missing fields instead of returning `None`.
@@ -64,7 +35,7 @@ def schema_from_umongo_get_attribute(self, attr, obj, default):
             ...
 
     """
-    ret = MaSchema.get_attribute(self, attr, obj, default)
+    ret = MaSchema.get_attribute(self, obj, attr, default)
     if ret is None and ret is not default and attr in obj.schema.fields:
         raw_ret = obj._data.get(attr)
         return default if raw_ret is missing else raw_ret
@@ -80,9 +51,6 @@ class SchemaFromUmongo(MaSchema):
     .. note: It is not mandatory to use this schema with umongo document.
         This is just a helper providing usefull behaviors.
     """
-
-    __check_unknown_fields = validates_schema(pass_original=True)(
-        schema_validator_check_unknown_fields)
     get_attribute = schema_from_umongo_get_attribute
 
 
@@ -98,8 +66,8 @@ class StrictDateTime(ma_fields.DateTime):
         super().__init__(*args, **kwargs)
         self.load_as_tz_aware = load_as_tz_aware
 
-    def _deserialize(self, value, attr, data):
-        date = super()._deserialize(value, attr, data)
+    def _deserialize(self, value, attr, data, **kwargs):
+        date = super()._deserialize(value, attr, data, **kwargs)
         return self._set_tz_awareness(date)
 
     def _set_tz_awareness(self, date):
@@ -125,7 +93,7 @@ class ObjectId(ma_fields.Field):
             return None
         return str(value)
 
-    def _deserialize(self, value, attr, data):
+    def _deserialize(self, value, attr, data, **kwargs):
         try:
             return bson.ObjectId(value)
         except bson.errors.InvalidId:
@@ -171,7 +139,7 @@ class GenericReference(ma_fields.Field):
             # In OO world, value is a :class:`umongo.data_object.Reference`
             return {'id': str(value.pk), 'cls': value.document_cls.__name__}
 
-    def _deserialize(self, value, attr, data):
+    def _deserialize(self, value, attr, data, **kwargs):
         if not isinstance(value, dict):
             raise ValidationError(_("Invalid value for generic reference field."))
         if value.keys() != {'cls', 'id'}:

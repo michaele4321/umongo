@@ -43,7 +43,7 @@ def _collect_schema_attrs(nmspc):
     schema_non_fields = {}
     doc_nmspc = {}
     for key, item in nmspc.items():
-        if hasattr(item, '__marshmallow_tags__'):
+        if hasattr(item, '__marshmallow_hook__'):
             # Decorated special functions (e.g. `post_load`)
             schema_non_fields[key] = item
         elif isinstance(item, Field):

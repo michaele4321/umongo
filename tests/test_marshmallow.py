@@ -6,8 +6,7 @@ import marshmallow
 from umongo import Document, EmbeddedDocument, fields, set_gettext, validate
 from umongo import marshmallow_bonus as ma_bonus_fields
 from umongo.abstract import BaseField, BaseSchema
-from umongo.marshmallow_bonus import (
-    schema_validator_check_unknown_fields, schema_from_umongo_get_attribute, SchemaFromUmongo)
+from umongo.marshmallow_bonus import schema_from_umongo_get_attribute, SchemaFromUmongo
 
 from .common import BaseTest
 
@@ -50,30 +49,26 @@ class TestMarshmallow(BaseTest):
         assert issubclass(ma_schema_cls, MyBaseSchema)
 
         schema = ma_schema_cls()
-        ret = schema.dump({'name': "42", 'age': 42, 'dummy': False})
-        assert not ret.errors
-        assert ret.data == {'name': "42", 'age': 42}
-        ret = schema.load({'name': "42", 'age': 42, 'dummy': False})
-        assert ret.errors == {'_schema': ['Unknown field name dummy.']}
-        ret = schema.load({'name': "42", 'age': 42})
-        assert not ret.errors
-        assert ret.data == {'name': "42", 'age': 42}
+        assert schema.dump({'name': "42", 'age': 42, 'dummy': False}) == {'name': "42", 'age': 42}
+        with pytest.raises(marshmallow.ValidationError) as excinfo:
+            schema.load({'name': "42", 'age': 42, 'dummy': False})
+        assert excinfo.value.messages == {'dummy': ['Unknown field.']}
+        assert schema.load({'name': "42", 'age': 42}) == {'name': "42", 'age': 42}
 
     def test_customize_params(self):
         ma_field = self.User.schema.fields['name'].as_marshmallow_field(params={'load_only': True})
         assert ma_field.load_only is True
 
-        ma_schema_cls = self.User.schema.as_marshmallow_schema(params={'name': {'load_only': True, 'dump_only': True}})
+        ma_schema_cls = self.User.schema.as_marshmallow_schema(
+            params={'name': {'load_only': True, 'dump_only': True}})
         schema = ma_schema_cls()
         ret = schema.dump({'name': "42", 'birthday': datetime(1990, 10, 23), 'dummy': False})
-        assert not ret.errors
-        assert ret.data == {'birthday': '1990-10-23T00:00:00+00:00'}
-        ret = schema.load({'name': "42", 'birthday': '1990-10-23T00:00:00+00:00', 'dummy': False})
-        assert (ret.errors == {'_schema': ['Unknown field name name.', 'Unknown field name dummy.']} or
-                ret.errors == {'_schema': ['Unknown field name dummy.', 'Unknown field name name.']})
+        assert ret == {'birthday': '1990-10-23T00:00:00+00:00'}
+        with pytest.raises(marshmallow.ValidationError) as excinfo:
+            schema.load({'name': "42", 'birthday': '1990-10-23T00:00:00+00:00', 'dummy': False})
+        assert excinfo.value.messages == {'name': ['Unknown field.'], 'dummy': ['Unknown field.']}
         ret = schema.load({'birthday': '1990-10-23T00:00:00'})
-        assert not ret.errors
-        assert ret.data == {'birthday': datetime(1990, 10, 23)}
+        assert ret == {'birthday': datetime(1990, 10, 23)}
 
     def test_customize_nested_and_container_params(self):
         @self.instance.register
@@ -143,10 +138,10 @@ class TestMarshmallow(BaseTest):
         ma_schema_cls = Vehicle.schema.as_marshmallow_schema()
         schema = ma_schema_cls()
 
-        ret = schema.load({})
-        assert ret.errors == {'category': ['Missing data for required field.']}
-        ret = schema.load({'category': 'Car'})
-        assert ret.data == {'category': 'Car', 'nb_wheels': 4}
+        with pytest.raises(marshmallow.ValidationError) as excinfo:
+            schema.load({})
+        assert excinfo.value.messages == {'category': ['Missing data for required field.']}
+        assert schema.load({'category': 'Car'}) == {'category': 'Car', 'nb_wheels': 4}
 
         assert schema.fields['brand'].metadata['description'] == 'Manufacturer name'
 
@@ -159,13 +154,14 @@ class TestMarshmallow(BaseTest):
         ma_schema_cls = WithMailUser.schema.as_marshmallow_schema()
         schema = ma_schema_cls()
 
-        ret = schema.load({'email': 'a' * 100 + '@user.com', 'number_of_legs': 4})
-        assert ret.errors == {'email': ['Longer than maximum length 100.'],
-                              'number_of_legs': ['Not a valid choice.']}
+        with pytest.raises(marshmallow.ValidationError) as excinfo:
+            schema.load({'email': 'a' * 100 + '@user.com', 'number_of_legs': 4})
+        assert excinfo.value.messages == {
+            'email': ['Longer than maximum length 100.'],
+            'number_of_legs': ['Not a valid choice.']}
 
-        ret = schema.load({'email': 'user@user.com', 'number_of_legs': 2})
-        assert not ret.errors
-        assert ret.data == {'email': 'user@user.com', 'number_of_legs': 2}
+        data = {'email': 'user@user.com', 'number_of_legs': 2}
+        assert schema.load(data) == data
 
     def test_inheritance(self):
         @self.instance.register
@@ -176,9 +172,7 @@ class TestMarshmallow(BaseTest):
         ma_schema_cls = AdvancedUser.schema.as_marshmallow_schema()
         schema = ma_schema_cls()
 
-        ret = schema.dump({'is_left_handed': True})
-        assert not ret.errors
-        assert ret.data == {'name': '1337', 'is_left_handed': True}
+        assert schema.dump({'is_left_handed': True}) == {'name': '1337', 'is_left_handed': True}
 
     def test_to_mongo(self):
         @self.instance.register
@@ -191,15 +185,16 @@ class TestMarshmallow(BaseTest):
         ma_mongo_schema_cls = Dog.schema.as_marshmallow_schema(mongo_world=True)
 
         ret = ma_schema_cls().load(payload)
-        assert not ret.errors
-        assert ret.data == {'name': 'Scruffy', 'age': 2}
-        assert ma_schema_cls().dump(ret.data).data == payload
+        assert ret == {'name': 'Scruffy', 'age': 2}
+        assert ma_schema_cls().dump(ret) == payload
 
         ret = ma_mongo_schema_cls().load(payload)
-        assert not ret.errors
-        assert ret.data == {'_id': 'Scruffy', 'age': 2}
-        assert ma_mongo_schema_cls().dump(ret.data).data == payload
+        assert ret == {'_id': 'Scruffy', 'age': 2}
+        assert ma_mongo_schema_cls().dump(ret) == payload
 
+    # "Unknown field" error message is not customizable yet.
+    # https://github.com/marshmallow-code/marshmallow/issues/852
+    @pytest.mark.xfail(reason='"Unknown field" error message is not customizable yet.')
     def test_i18n(self):
         # i18n support should be kept, because it's pretty cool to have this !
         def my_gettext(message):
@@ -208,19 +203,20 @@ class TestMarshmallow(BaseTest):
         set_gettext(my_gettext)
 
         ma_schema_cls = self.User.schema.as_marshmallow_schema()
-        ret = ma_schema_cls().load({'name': 'John', 'birthday': 'not_a_date', 'dummy_field': 'dummy'})
-        assert ret.errors == {'birthday': ['OMG !!! Not a valid datetime.'],
-                              '_schema': ['OMG !!! Unknown field name dummy_field.']}
+        with pytest.raises(marshmallow.ValidationError) as excinfo:
+            ma_schema_cls().load({'name': 'John', 'birthday': 'not_a_date', 'dummy_field': 'dummy'})
+        assert excinfo.value.messages == {
+            'birthday': ['OMG !!! Not a valid datetime.'],
+            'dummy_field': ['OMG !!! Unknown field.']}
 
     def test_unknow_fields_check(self):
         ma_schema_cls = self.User.schema.as_marshmallow_schema()
-        ret = ma_schema_cls().load({'name': 'John', 'dummy_field': 'dummy'})
-        assert ret.errors == {'_schema': ['Unknown field name dummy_field.']}
+        with pytest.raises(marshmallow.ValidationError) as excinfo:
+            ma_schema_cls().load({'name': 'John', 'dummy_field': 'dummy'})
+        assert excinfo.value.messages == {'dummy_field': ['Unknown field.']}
 
         ma_schema_cls = self.User.schema.as_marshmallow_schema(check_unknown_fields=False)
-        ret = ma_schema_cls().load({'name': 'John', 'dummy_field': 'dummy'})
-        assert not ret.errors
-        assert ret.data == {'name': 'John'}
+        assert ma_schema_cls().load({'name': 'John', 'dummy_field': 'dummy'}) == {'name': 'John'}
 
     def test_missing_accessor(self):
         # TODO
@@ -248,19 +244,11 @@ class TestMarshmallow(BaseTest):
         ma_mongo_schema = Bag.schema.as_marshmallow_schema(mongo_world=True)()
 
         bag = Bag(**data)
-        ret = ma_schema.dump(bag)
-        assert not ret.errors
-        assert ret.data == data
-        ret = ma_schema.load(data)
-        assert not ret.errors
-        assert ret.data == data
+        assert ma_schema.dump(bag) == data
+        assert ma_schema.load(data) == data
 
-        ret = ma_mongo_schema.dump(bag.to_mongo())
-        assert not ret.errors
-        assert ret.data == data
-        ret = ma_mongo_schema.load(data)
-        assert not ret.errors
-        assert ret.data == bag.to_mongo()
+        assert ma_mongo_schema.dump(bag.to_mongo()) == data
+        assert ma_mongo_schema.load(data) == bag.to_mongo()
 
         # Check as_marshmallow_schema params (check_unknown_felds, base_schema_cls)
         # are passed to nested schemas
@@ -270,24 +258,23 @@ class TestMarshmallow(BaseTest):
                 {'brief': 'cellphone', 'value': 500, 'name': 'Unknown'},
                 {'brief': 'lighter', 'value': 2, 'name': 'Unknown'}]
         }
-        ret = ma_schema.load(data)
-        assert ret.errors == {
-            'id': {'_schema': ['Unknown field name name.']},
+        with pytest.raises(marshmallow.ValidationError) as excinfo:
+            ma_schema.load(data)
+        assert excinfo.value.messages == {
+            'id': {'name': ['Unknown field.']},
             'content': {
-                0: {'_schema': ['Unknown field name name.']},
-                1: {'_schema': ['Unknown field name name.']},
+                0: {'name': ['Unknown field.']},
+                1: {'name': ['Unknown field.']},
             }}
 
         ma_no_check_unknown_schema = Bag.schema.as_marshmallow_schema(check_unknown_fields=False)()
-        ret = ma_no_check_unknown_schema.load(data)
-        assert not ret.errors
+        ma_no_check_unknown_schema.load(data)
 
         class WithNameSchema(marshmallow.Schema):
             name = marshmallow.fields.Str()
 
         ma_custom_base_schema = Bag.schema.as_marshmallow_schema(base_schema_cls=WithNameSchema)()
-        ret = ma_custom_base_schema.load(data)
-        assert not ret.errors
+        ma_custom_base_schema.load(data)
 
     def test_marshmallow_bonus_fields(self):
         # Fields related to mongodb provided for marshmallow
@@ -323,39 +310,20 @@ class TestMarshmallow(BaseTest):
         # schema to OO world
         ma_schema_cls = Doc.schema.as_marshmallow_schema()
         ma_schema = ma_schema_cls()
-        ret = ma_schema.dump(doc)
-        assert not ret.errors
-        assert ret.data == serialized
-        ret = ma_schema.load(serialized)
-        assert not ret.errors
-        assert ret.data == oo_data
+        assert ma_schema.dump(doc) == serialized
+        assert ma_schema.load(serialized) == oo_data
 
         # schema to mongo world
         ma_mongo_schema_cls = Doc.schema.as_marshmallow_schema(mongo_world=True)
         ma_mongo_schema = ma_mongo_schema_cls()
-        ret = ma_mongo_schema.dump(mongo_data)
-        assert not ret.errors
-        assert ret.data == serialized
-        ret = ma_mongo_schema.load(serialized)
-        assert ret.errors == {}
-        assert ret.data == mongo_data
+        assert ma_mongo_schema.dump(mongo_data) == serialized
+        assert ma_mongo_schema.load(serialized) == mongo_data
         # Cannot load mongo form
-        ret = ma_mongo_schema.load({"gen_ref": {'_cls': 'Doc', '_id': "57c1a71113adf27ab96b2c4f"}})
-        assert ret.errors == {'gen_ref': ['Generic reference must have `id` and `cls` fields.']}
+        with pytest.raises(marshmallow.ValidationError) as excinfo:
+            ma_mongo_schema.load({"gen_ref": {'_cls': 'Doc', '_id': "57c1a71113adf27ab96b2c4f"}})
+        assert excinfo.value.messages == {'gen_ref': ['Generic reference must have `id` and `cls` fields.']}
 
     def test_marshmallow_schema_helpers(self):
-
-        class CheckUnknownSchema(marshmallow.Schema):
-            __check_unknown_fields = marshmallow.validates_schema(
-                pass_original=True)(schema_validator_check_unknown_fields)
-            a = marshmallow.fields.Int()
-
-        _, errors = CheckUnknownSchema().load({'a': 1, 'dummy': 2})
-        assert errors == {'_schema': ['Unknown field name dummy.']}
-
-        data, errors = CheckUnknownSchema().load({'a': 1})
-        assert not errors
-        assert data == {'a': 1}
 
         @self.instance.register
         class Doc(Document):
@@ -371,31 +339,26 @@ class TestMarshmallow(BaseTest):
         class CustomGetAttributeSchema(VanillaSchema):
             get_attribute = schema_from_umongo_get_attribute
 
-        data, errors = VanillaSchema().dump(Doc())
-        assert not errors
+        data = VanillaSchema().dump(Doc())
         assert data == {'a': None}
 
-        data, errors = CustomGetAttributeSchema().dump(Doc())
-        assert not errors
+        data = CustomGetAttributeSchema().dump(Doc())
         assert data == {}
 
-        data, errors = CustomGetAttributeSchema().dump(Doc(a=1))
-        assert not errors
+        data = CustomGetAttributeSchema().dump(Doc(a=1))
         assert data == {'a': 1}
 
         class MySchemaFromUmongo(SchemaFromUmongo):
             a = marshmallow.fields.Int()
             prop = marshmallow.fields.String(dump_only=True)
 
-        data, errors = MySchemaFromUmongo().dump(Doc())
-        assert not errors
-        assert data == {'prop': "I'm a property !"}
+        with pytest.raises(marshmallow.ValidationError) as excinfo:
+            MySchemaFromUmongo().load({'a': 1, 'dummy': 2})
+        assert excinfo.value.messages == {'dummy': ['Unknown field.']}
 
-        _, errors = MySchemaFromUmongo().load({'a': 1, 'dummy': 2})
-        assert errors == {'_schema': ['Unknown field name dummy.']}
-
-        _, errors = MySchemaFromUmongo().load({'a': 1, 'prop': '2'})
-        assert errors == {'_schema': ['Unknown field name prop.']}
+        with pytest.raises(marshmallow.ValidationError) as excinfo:
+            MySchemaFromUmongo().load({'a': 1, 'prop': '2'})
+        assert excinfo.value.messages == {'prop': ['Unknown field.']}
 
     def test_marshmallow_access_custom_attributes(self):
 
@@ -417,24 +380,17 @@ class TestMarshmallow(BaseTest):
             def missing_prop(self):
                 return marshmallow.missing
 
-            def func_get_42(self):
-                return 42
-
         class Schema(Doc.schema.as_marshmallow_schema()):
             str_prop = marshmallow.fields.Str(dump_only=True)
             none_prop = marshmallow.fields.Str(allow_none=True, dump_only=True)
             missing_prop = marshmallow.fields.Str(dump_only=True)
             attribute_foo = marshmallow.fields.Str(dump_only=True)
-            get_42 = marshmallow.fields.Int(dump_only=True, attribute="func_get_42")
 
-        ret = Schema().dump(Doc(a=1))
-        assert not ret.errors
-        assert ret.data == {
+        assert Schema().dump(Doc(a=1)) == {
             'a': 1,
             'str_prop': "I'm a property !",
             'none_prop': None,
             'attribute_foo': 'foo',
-            'get_42': 42
         }
 
     def test_dump_only(self):
@@ -454,4 +410,6 @@ class TestMarshmallow(BaseTest):
 
         assert Doc(dl=1, lo=2).dump() == {'dl': 1}
 
-        assert Doc(nope=marshmallow.missing, do=marshmallow.missing).dump() == {}
+        with pytest.raises(marshmallow.ValidationError) as excinfo:
+            Doc(nope=marshmallow.missing, do=marshmallow.missing)
+        assert excinfo.value.messages == {'nope': ['Unknown field.'], 'do': ['Unknown field.']}

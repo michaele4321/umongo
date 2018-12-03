@@ -87,8 +87,8 @@ class TestFields(BaseTest):
             email = fields.EmailField()
             constant = fields.ConstantField("const")
 
-        s = MySchema(strict=True)
-        data, err = s.load({
+        s = MySchema()
+        data = s.load({
             'string': 'value',
             'uuid': '8c58b5fc-b902-40c8-9d55-e9beb0906f80',
             'number': 1.0,
@@ -100,7 +100,6 @@ class TestFields(BaseTest):
             'email': "jdoe@example.com",
             'constant': 'forget me'
         })
-        assert not err
         assert data == {
             'string': 'value',
             'uuid': UUID('8c58b5fc-b902-40c8-9d55-e9beb0906f80'),
@@ -113,7 +112,7 @@ class TestFields(BaseTest):
             'email': "jdoe@example.com",
             'constant': 'const'
         }
-        dumped, err = s.dump({
+        dumped = s.dump({
             'string': 'value',
             'uuid': UUID('8c58b5fc-b902-40c8-9d55-e9beb0906f80'),
             'number': 1.0,
@@ -127,7 +126,6 @@ class TestFields(BaseTest):
             'email': "jdoe@example.com",
             'constant': 'forget me'
         })
-        assert not err
         assert dumped == {
             'string': 'value',
             'uuid': '8c58b5fc-b902-40c8-9d55-e9beb0906f80',
@@ -149,12 +147,12 @@ class TestFields(BaseTest):
         class MySchema(EmbeddedSchema):
             a = fields.DateTimeField()
 
-        s = MySchema(strict=True)
-        data, _ = s.load({'a': datetime(2016, 8, 6)})
+        s = MySchema()
+        data = s.load({'a': datetime(2016, 8, 6)})
         assert data['a'] == datetime(2016, 8, 6)
-        data, _ = s.load({'a': "2016-08-06T00:00:00Z"})
+        data = s.load({'a': "2016-08-06T00:00:00Z"})
         assert data['a'] == datetime(2016, 8, 6, tzinfo=tzutc())
-        data, _ = s.load({'a': "2016-08-06T00:00:00"})
+        data = s.load({'a': "2016-08-06T00:00:00"})
         assert data['a'] == datetime(2016, 8, 6)
         with pytest.raises(ValidationError):
             s.load({'a': "dummy"})
@@ -167,7 +165,7 @@ class TestFields(BaseTest):
             c = fields.StrictDateTimeField(load_as_tz_aware=True)
 
         # Test _deserialize
-        s = MySchema(strict=True)
+        s = MySchema()
 
         for date in (
             datetime(2016, 8, 6),
@@ -175,7 +173,7 @@ class TestFields(BaseTest):
             "2016-08-06T00:00:00Z",
             "2016-08-06T00:00:00",
         ):
-            data, _ = s.load({'a': date, 'b': date, 'c': date})
+            data = s.load({'a': date, 'b': date, 'c': date})
             assert data['a'] == datetime(2016, 8, 6)
             assert data['b'] == datetime(2016, 8, 6)
             assert data['c'] == datetime(2016, 8, 6, tzinfo=tzutc())
@@ -184,7 +182,7 @@ class TestFields(BaseTest):
             "2016-08-06T00:00:00+02:00",
             datetime(2016, 8, 6, tzinfo=tzoffset(None, 7200)),
         ):
-            data, _ = s.load({'a': date, 'b': date, 'c': date})
+            data = s.load({'a': date, 'b': date, 'c': date})
             assert data['a'] == datetime(2016, 8, 5, 22, 0)
             assert data['b'] == datetime(2016, 8, 5, 22, 0)
             assert data['c'] == datetime(2016, 8, 6, tzinfo=tzoffset(None, 7200))
